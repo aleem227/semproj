@@ -12,17 +12,17 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [backendReady, setBackendReady] = useState(false);
+  const [capturedImage, setCapturedImage] = useState(null);
 
-  // Initialize camera with better error handling
+  // Initialize camera
   const startCamera = async () => {
     try {
-      // First check if the browser supports getUserMedia
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Your browser does not support webcam access');
       }
       
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: 224, height: 224 }
+        video: { facingMode: 'user', width: 640, height: 480 }
       });
       
       if (videoRef.current) {
@@ -32,7 +32,6 @@ function App() {
     } catch (err) {
       console.error("Error accessing webcam:", err);
       
-      // Provide more specific error messages
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
         alert("Camera access denied. Please allow camera access in your browser settings.");
       } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
@@ -68,7 +67,6 @@ function App() {
         }
       } catch (err) {
         console.error("Error connecting to backend:", err);
-        alert("Could not connect to the backend server. Please make sure it's running.");
       }
     };
 
@@ -80,6 +78,11 @@ function App() {
     };
   }, []);
 
+  // Start camera automatically when component mounts
+  useEffect(() => {
+    startCamera();
+  }, []);
+
   // Capture image from webcam
   const captureImage = () => {
     if (!videoRef.current || !canvasRef.current) return;
@@ -89,11 +92,15 @@ function App() {
     const context = canvas.getContext('2d');
     
     // Set canvas dimensions to match video
-    canvas.width = 224;
-    canvas.height = 224;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
     
     // Draw the current video frame to the canvas
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    // Save captured image
+    const imageUrl = canvas.toDataURL('image/jpeg');
+    setCapturedImage(imageUrl);
     
     // Process the image and make prediction
     processImage(canvas);
@@ -108,7 +115,7 @@ function App() {
       const imageDataUrl = canvas.toDataURL('image/jpeg');
       
       // Send to backend API
-      const response = await fetch('http://localhost:5000/predict/resnet34', {
+      const response = await fetch('http://localhost:5000/predict', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -137,59 +144,159 @@ function App() {
     }
   };
 
+  // Reset the process
+  const resetCapture = () => {
+    setCapturedImage(null);
+    setPredictions({ age: null, gender: null });
+  };
+
   return (
-    <div className="App">
-      <h1>UTK Face Predictor</h1>
-      
-      <div className="controls">
-        {!cameraActive ? (
-          <button onClick={startCamera} disabled={isLoading}>
-            Start Camera
-          </button>
-        ) : (
-          <button onClick={stopCamera} disabled={isLoading}>
-            Stop Camera
-          </button>
-        )}
-        
-        <button 
-          onClick={captureImage} 
-          disabled={!cameraActive || isLoading || !backendReady}
-        >
-          Capture and Predict
-        </button>
+    <div className="app-container">
+      <div className="project-introduction">
+        <div className="project-title">Machine Learning - Semester Project</div>
+        <div className="authors">
+          <ul>
+            <li>Muhammad Aleem Shakeel</li>
+            {/* <li>Sheza Naqvi</li>
+            <li>Zainab</li> */}
+          </ul>
+        </div>
+      </div>
+      <div className="header">
+        <h1>Age & Gender Predictor</h1>
+        {!backendReady && <div className="backend-status">Backend disconnected</div>}
       </div>
       
-      <div className="content">
-        <div className="video-container">
-          <video 
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            style={{ width: '224px', height: '224px' }}
-          />
-          <canvas 
-            ref={canvasRef} 
-            style={{ display: 'none' }}
-          />
+      <div className="main-content">
+        <div className="video-section">
+          <div className="video-container">
+            {!capturedImage ? (
+              <video 
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+              />
+            ) : (
+              <img 
+                src={capturedImage} 
+                alt="Captured" 
+                className="captured-image"
+              />
+            )}
+            
+            <div className="video-overlay">
+              {!capturedImage && cameraActive && (
+                <svg className="frame-lines" viewBox="0 0 100 100" preserveAspectRatio="none">
+                  <line x1="30" y1="0" x2="30" y2="10" />
+                  <line x1="0" y1="30" x2="10" y2="30" />
+                  
+                  <line x1="70" y1="0" x2="70" y2="10" />
+                  <line x1="90" y1="30" x2="100" y2="30" />
+                  
+                  <line x1="30" y1="90" x2="30" y2="100" />
+                  <line x1="0" y1="70" x2="10" y2="70" />
+                  
+                  <line x1="70" y1="90" x2="70" y2="100" />
+                  <line x1="90" y1="70" x2="100" y2="70" />
+                </svg>
+              )}
+            </div>
+            
+            <canvas ref={canvasRef} style={{ display: 'none' }} />
+          </div>
+          
+          <div className="camera-controls">
+            {!capturedImage ? (
+              <>
+                <div className="camera-toggle-container">
+                  <input 
+                    type="checkbox"
+                    id="camera-toggle"
+                    className="camera-toggle-checkbox"
+                    checked={cameraActive}
+                    onChange={cameraActive ? stopCamera : startCamera}
+                    disabled={isLoading}
+                  />
+                  <label 
+                    htmlFor="camera-toggle" 
+                    className="camera-toggle-label"
+                    title={cameraActive ? "Turn camera off" : "Turn camera on"}
+                  >
+                    <div className="camera-toggle-inner">
+                      <div className="camera-toggle-switch">
+                        <svg className="camera-icon" viewBox="0 0 24 24">
+                          <path d="M18 10.48V6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-4.48l4 3.98v-11l-4 3.98zm-2-.79V18H4V6h12v3.69z" />
+                        </svg>
+                        <svg className="camera-off-icon" viewBox="0 0 24 24">
+                          <path d="M18 10.48V6c0-1.1-.9-2-2-2H8.83l2 2H16v3.17l1.83 1.83L18 10.48zm2.5-.48L15.17 4H12c-1.1 0-2 .9-2 2h-4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c.34 0 .65-.09.93-.24L20.5 10zM2.1 4.93L4 6.83V14c0 1.1.9 2 2 2h8.17l1.73 1.73c-.28.15-.59.24-.93.24H6c-1.1 0-2-.9-2-2V8.83L1.9 6.73 2.1 4.93z" />
+                          <path d="M3.55 2.44L2.1 3.89l18 18 1.45-1.45z" />
+                        </svg>
+                      </div>
+                    </div>
+                    <span className="toggle-status">
+                      {cameraActive ? "Camera On" : "Camera Off"}
+                    </span>
+                  </label>
+                </div>
+                
+                <button 
+                  className="primary-button"
+                  onClick={captureImage} 
+                  disabled={!cameraActive || isLoading || !backendReady}
+                >
+                  Capture Image
+                </button>
+              </>
+            ) : (
+              <button 
+                className="secondary-button"
+                onClick={resetCapture}
+                disabled={isLoading}
+              >
+                Take New Photo
+              </button>
+            )}
+          </div>
         </div>
         
-        <div className="results">
-          {!backendReady && (
-            <div className="error">Backend server not connected</div>
-          )}
-          {isLoading ? (
-            <div className="loading">Processing...</div>
-          ) : (
-            predictions.age !== null && (
-              <div>
-                <h2>Predictions:</h2>
-                <p>Age: {predictions.age} years</p>
-                <p>Gender: {predictions.gender}</p>
+        <div className="results-section">
+          <div className="results-card">
+            <h2>Analysis Results</h2>
+            
+            {isLoading ? (
+              <div className="loading-container">
+                <div className="loading-spinner"></div>
+                <p>Analyzing image...</p>
               </div>
-            )
-          )}
+            ) : predictions.age !== null ? (
+              <div className="prediction-results">
+                <div className="result-item">
+                  <div className="result-label">Age</div>
+                  <div className="result-value">{predictions.age} years</div>
+                </div>
+                <div className="result-item">
+                  <div className="result-label">Gender</div>
+                  <div className="result-value">{predictions.gender}</div>
+                </div>
+              </div>
+            ) : (
+              <div className="empty-results">
+                <p>Capture an image to see predictions</p>
+              </div>
+            )}
+          </div>
+          
+          <div className="info-card">
+            <h3>How it works</h3>
+            <p>This app uses a deep learning model trained on the UTK Face dataset to predict age and gender from facial images.</p>
+            <p>For best results:</p>
+            <ul>
+              <li>Ensure good lighting</li>
+              <li>Face the camera directly</li>
+              <li>Remove hats or sunglasses</li>
+            </ul>
+          </div>
         </div>
       </div>
     </div>

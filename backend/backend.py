@@ -1,16 +1,27 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 import torch
 import base64
 import io
 from PIL import Image
 import torchvision.transforms as transforms
 import re
+from typing import Optional
 
 from modelling_resnet34 import UTKFaceModel
 
-app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+app = FastAPI()
+
+# Enable CORS for all routes
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
 
 # Load the model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -26,18 +37,18 @@ transform = transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
 
-@app.route('/health', methods=['GET'])
-def health():
-    return jsonify({'status': 'ok'})
+class ImageRequest(BaseModel):
+    image: str
 
-@app.route('/predict/resnet34', methods=['POST'])
-def predict():
-    if not request.json or 'image' not in request.json:
-        return jsonify({'error': 'No image provided'}), 400
-    
+@app.get('/health')
+def health():
+    return {"status": "ok"}
+
+@app.post('/predict/resnet34')
+async def predict(request: ImageRequest):
     try:
         # Get the base64 image data
-        image_data = request.json['image']
+        image_data = request.image
         # Remove the data URL prefix if present
         if 'data:image' in image_data:
             image_data = re.sub('^data:image/.+;base64,', '', image_data)
@@ -54,15 +65,14 @@ def predict():
             age_output, gender_output = model(image_tensor)
             
         # Return results
-        return jsonify({
+        return {
             'age': float(age_output.item()),
             'gender': float(gender_output.item())
-        })
+        }
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=5000)
