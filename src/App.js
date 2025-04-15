@@ -1,18 +1,74 @@
 import React, { useRef, useState, useEffect } from 'react';
-// Remove the TensorFlow.js import since we're not using it anymore
-// import * as tf from '@tensorflow/tfjs';
+// Re-enable TensorFlow.js import
+import * as tf from '@tensorflow/tfjs';
 import './App.css';
 
 function App() {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
-  // Remove the model state since we're using the backend API
-  // const [model, setModel] = useState(null);
+  // Re-add model state
+  const [model, setModel] = useState(null);
   const [predictions, setPredictions] = useState({ age: null, gender: null });
   const [isLoading, setIsLoading] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
-  const [backendReady, setBackendReady] = useState(false);
+  // Remove backend ready state since we'll use client-side model
+  const [modelLoading, setModelLoading] = useState(true);
   const [capturedImage, setCapturedImage] = useState(null);
+  // Add latency state
+  const [latency, setLatency] = useState(null);
+  // Add selected model state
+  const [selectedModel, setSelectedModel] = useState('resnet34');
+
+  // Load model when component mounts or when selected model changes
+  useEffect(() => {
+    const loadModel = async () => {
+      try {
+        setModelLoading(true);
+        console.log(`Loading ${selectedModel} model...`);
+        
+        // Clean up previous model if it exists
+        if (model) {
+          try {
+            model.dispose();
+          } catch (err) {
+            console.error('Error disposing previous model:', err);
+          }
+        }
+        
+        // Load the model from the public folder based on selection
+        const modelPath = `/models/${selectedModel}/model.json`;
+        const loadedModel = await tf.loadLayersModel(modelPath);
+        setModel(loadedModel);
+        console.log(`${selectedModel} model loaded successfully`);
+        setModelLoading(false);
+      } catch (err) {
+        console.error(`Error loading ${selectedModel} model:`, err);
+        setModelLoading(false);
+      }
+    };
+
+    loadModel();
+    
+    // Cleanup on component unmount or model change
+    return () => {
+      // Dispose of tensors and models when component unmounts
+      if (model) {
+        try {
+          model.dispose();
+        } catch (err) {
+          console.error('Error disposing model:', err);
+        }
+      }
+    };
+  }, [selectedModel, model]); // Added model as dependency
+
+  // Handle model selection change
+  const handleModelChange = (e) => {
+    setSelectedModel(e.target.value);
+    // Reset predictions when changing models
+    setPredictions({ age: null, gender: null });
+    setLatency(null);
+  };
 
   // Initialize camera
   const startCamera = async () => {
@@ -27,20 +83,20 @@ function App() {
       
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        setCameraActive(true);
+        videoRef.current.play(); // Explicitly play the video
+        setCameraActive(true); // Set active immediately
+        
+        // Additional check after metadata loads
+        videoRef.current.onloadedmetadata = () => {
+          if (videoRef.current.readyState >= 2) {
+            setCameraActive(true);
+          }
+        };
       }
     } catch (err) {
       console.error("Error accessing webcam:", err);
-      
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        alert("Camera access denied. Please allow camera access in your browser settings.");
-      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-        alert("No camera found. Please connect a camera and try again.");
-      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-        alert("Camera is already in use by another application. Please close other apps using the camera.");
-      } else {
-        alert(`Error accessing webcam: ${err.message}. Please check permissions.`);
-      }
+      setCameraActive(false);
+      alert(`Camera error: ${err.message}`);
     }
   };
 
@@ -54,33 +110,14 @@ function App() {
     }
   };
 
-  // Check if backend is ready
+  // Start camera automatically when component mounts
   useEffect(() => {
-    const checkBackend = async () => {
-      try {
-        const response = await fetch('http://localhost:5000/health');
-        if (response.ok) {
-          setBackendReady(true);
-          console.log("Backend is ready");
-        } else {
-          console.error("Backend health check failed");
-        }
-      } catch (err) {
-        console.error("Error connecting to backend:", err);
-      }
-    };
-
-    checkBackend();
+    startCamera();
     
     // Cleanup on component unmount
     return () => {
       stopCamera();
     };
-  }, []);
-
-  // Start camera automatically when component mounts
-  useEffect(() => {
-    startCamera();
   }, []);
 
   // Capture image from webcam
@@ -106,48 +143,66 @@ function App() {
     processImage(canvas);
   };
 
-  // Process image and make prediction
+  // Process image and make prediction using TensorFlow.js
   const processImage = async (canvas) => {
     setIsLoading(true);
     
     try {
-      // Get image as base64 data URL
-      const imageDataUrl = canvas.toDataURL('image/jpeg');
-      
-      // Send to backend API
-      const response = await fetch('http://localhost:5000/predict', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          image: imageDataUrl
-        }),
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
+      // Check if model is loaded before proceeding
+      if (!model) {
+        throw new Error('Model is not loaded yet');
       }
+
+      const startTime = performance.now(); // Start time measurement
       
-      const result = await response.json();
+      // Preprocess the image for the model
+      const imageData = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+      
+      // Resize and normalize the image data for the model
+      const tensor = tf.browser.fromPixels(imageData)
+        .resizeBilinear([224, 224]) // Resize to model input size
+        .toFloat()
+        .div(tf.scalar(255.0)) // Normalize to [0,1]
+        .expandDims(0); // Add batch dimension
+      
+      // Make prediction
+      const result = await model.predict(tensor);
+      
+      // Process the prediction results
+      // Assuming the model outputs [age, gender]
+      const predictions = await result[0].dataSync(); // Get age
+      const gender = await result[1].dataSync(); // Get gender
+      
+      // Calculate latency
+      const endTime = performance.now();
+      const predictionTime = endTime - startTime;
+      setLatency(predictionTime.toFixed(2));
+      
+      // Clean up tensor to prevent memory leaks
+      tensor.dispose();
+      result.forEach(t => t.dispose());
       
       setPredictions({
-        age: Math.round(result.age),
-        gender: result.gender > 0.5 ? 'Female' : 'Male'
+        age: Math.round(predictions[0]),
+        gender: gender[0] > 0.5 ? 'Female' : 'Male'
       });
-      
     } catch (err) {
       console.error("Error processing image:", err);
-      alert("Error processing image. See console for details.");
+      alert(`Error processing image: ${err.message}`);
+      // Reset the capture on error so user can try again
+      resetCapture();
     } finally {
       setIsLoading(false);
     }
   };
 
   // Reset the process
-  const resetCapture = () => {
+  const resetCapture = async () => {
     setCapturedImage(null);
     setPredictions({ age: null, gender: null });
+    setLatency(null);
+    // Restart the camera
+    await startCamera();
   };
 
   return (
@@ -164,12 +219,69 @@ function App() {
       </div>
       <div className="header">
         <h1>Age & Gender Predictor</h1>
-        {!backendReady && <div className="backend-status">Backend disconnected</div>}
+        {modelLoading && <div className="model-status">Loading model...</div>}
+      </div>
+      
+      <div className="model-selection">
+        <h3>Select Model</h3>
+        <div className="model-options">
+          <label className={`model-option ${selectedModel === 'resnet34' ? 'selected' : ''}`}>
+            <input
+              type="radio"
+              name="model"
+              value="resnet34"
+              checked={selectedModel === 'resnet34'}
+              onChange={handleModelChange}
+              disabled={isLoading || modelLoading}
+            />
+            <div className="model-details">
+              <h4>ResNet-34</h4>
+              <p className="model-description">Lightweight model with good latency and accuracy tradeoff</p>
+              <div className="model-specs">
+                <span className="spec-item">
+                  <span role="img" aria-label="Fast">⚡</span> Fast inference
+                </span>
+                <span className="spec-item">
+                  <span role="img" aria-label="Balanced">✓</span> Balanced accuracy
+                </span>
+                <span className="spec-item">
+                  <span role="img" aria-label="Mobile">📱</span> Mobile-friendly
+                </span>
+              </div>
+            </div>
+          </label>
+          
+          <label className={`model-option ${selectedModel === 'resnet152' ? 'selected' : ''}`}>
+            <input
+              type="radio"
+              name="model"
+              value="resnet152"
+              checked={selectedModel === 'resnet152'}
+              onChange={handleModelChange}
+              disabled={isLoading || modelLoading}
+            />
+            <div className="model-details">
+              <h4>ResNet-152</h4>
+              <p className="model-description">State-of-the-art model with high accuracy</p>
+              <div className="model-specs">
+                <span className="spec-item">
+                  <span role="img" aria-label="Accurate">🎯</span> Superior accuracy
+                </span>
+                <span className="spec-item">
+                  <span role="img" aria-label="Slower">⏱️</span> Higher latency
+                </span>
+                <span className="spec-item">
+                  <span role="img" aria-label="Desktop">💻</span> Better for desktop
+                </span>
+              </div>
+            </div>
+          </label>
+        </div>
       </div>
       
       <div className="main-content">
         <div className="video-section">
-          <div className="video-container">
+          <div className={`video-container ${cameraActive ? 'camera-active' : ''}`}>
             {!capturedImage ? (
               <video 
                 ref={videoRef}
@@ -243,7 +355,7 @@ function App() {
                 <button 
                   className="primary-button"
                   onClick={captureImage} 
-                  disabled={!cameraActive || isLoading || !backendReady}
+                  disabled={!cameraActive || isLoading || modelLoading}
                 >
                   Capture Image
                 </button>
@@ -267,7 +379,7 @@ function App() {
             {isLoading ? (
               <div className="loading-container">
                 <div className="loading-spinner"></div>
-                <p>Analyzing image...</p>
+                <p>Analyzing image with {selectedModel}...</p>
               </div>
             ) : predictions.age !== null ? (
               <div className="prediction-results">
@@ -279,6 +391,13 @@ function App() {
                   <div className="result-label">Gender</div>
                   <div className="result-value">{predictions.gender}</div>
                 </div>
+                {latency && (
+                  <div className="result-item">
+                    <div className="result-label">Latency</div>
+                    <div className="result-value">{latency} ms</div>
+                  </div>
+                )}
+                <div className="model-info">Using {selectedModel === 'resnet34' ? 'ResNet-34' : 'ResNet-152'} model</div>
               </div>
             ) : (
               <div className="empty-results">
@@ -289,7 +408,7 @@ function App() {
           
           <div className="info-card">
             <h3>How it works</h3>
-            <p>This app uses a deep learning model trained on the UTK Face dataset to predict age and gender from facial images.</p>
+            <p>This app uses a TensorFlow.js model running directly in your browser to predict age and gender from facial images.</p>
             <p>For best results:</p>
             <ul>
               <li>Ensure good lighting</li>

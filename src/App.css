@@ -70,7 +70,7 @@ body {
   width: 100%;
   border-radius: 12px;
   overflow: hidden;
-  background-color: #1a202c;
+  background-color: black;
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
   aspect-ratio: 4/3;
   display: flex;
@@ -463,4 +463,147 @@ body {
   background-position: center;
   background-size: 80px;
   opacity: 0.3;
+}
+
+.video-container.camera-active::after {
+  content: "" !important;
+  opacity: 0 !important;
+}
+
+.video-container.camera-active video {
+  filter: contrast(1.3) brightness(1.2) saturate(1.2);
+  opacity: 1;
+}
+
+/* Fix for whitish overlay on camera feed */
+.video-container.camera-active {
+  background-color: black !important;
+  background-image: none !important;
+  opacity: 1 !important;
+}
+
+/* Ensure no filter or blend mode is affecting the display */
+.video-container.camera-active::before,
+.video-container.camera-active::after {
+  display: none !important;
+  opacity: 0 !important;
+  content: none !important;
+}
+
+/* Fine-tuned video appearance to match captured image */
+.video-container video {
+  filter: contrast(1.15) saturate(1.25) brightness(0.95);
+  image-rendering: -webkit-optimize-contrast;
+  object-fit: cover;
+}
+
+/* Ensure the video is displayed properly */
+.video-container {
+  background-color: black !important;
+  overflow: hidden;
+}
+
+/* Remove any processing artifacts */
+.video-container::before,
+.video-container::after {
+  display: none !important;
+}
+
+/* Make sure video rendering is optimal */
+video {
+  backface-visibility: hidden;
+  transform: translateZ(0);
+  perspective: 1000;
+  will-change: transform;
+}
+
+/* Model Selection Styles */
+.model-selection {
+  max-width: 800px;
+  margin: 0 auto 20px;
+  padding: 0 15px;
+}
+
+.model-selection h3 {
+  text-align: center;
+  margin-bottom: 15px;
+  font-size: 1.2rem;
+  color: #333;
+}
+
+.model-options {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.model-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 280px;
+  padding: 15px;
+  border-radius: 8px;
+  background: #f8f9fa;
+  border: 2px solid #e9ecef;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.model-option:hover {
+  border-color: #ced4da;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.model-option.selected {
+  border-color: #4285f4;
+  box-shadow: 0 4px 12px rgba(66, 133, 244, 0.2);
+}
+
+.model-option input {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  height: 0;
+  width: 0;
+}
+
+.model-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.model-details h4 {
+  margin: 0 0 8px 0;
+  font-size: 1.1rem;
+  color: #212529;
+}
+
+.model-description {
+  margin: 0 0 12px 0;
+  font-size: 0.9rem;
+  color: #495057;
+}
+
+.model-specs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.spec-item {
+  font-size: 0.8rem;
+  background: #e9ecef;
+  color: #495057;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.model-info {
+  margin-top: 10px;
+  font-size: 0.85rem;
+  color: #6c757d;
+  font-style: italic;
+  text-align: center;
 }
