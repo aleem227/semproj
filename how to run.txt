@@ -1,0 +1,5 @@
+npm run build
+npx serve -s build
+ngrok http http://localhost:3000
+lt --port 3000
+get password from loca.lt/mytunnel/password
