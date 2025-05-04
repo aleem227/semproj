@@ -244,8 +244,8 @@ function App() {
           <div className="authors">
             <ul>
               <li>Muhammad Aleem Shakeel</li>
-              {/* <li>Sheza Naqvi</li>
-              <li>Zainab</li> */}
+              <li>Sheza Naqvi</li>
+              <li>Zainab Shahzad</li>
             </ul>
           </div>
         </div>
