@@ -173,12 +173,18 @@ function App() {
       // Preprocess the image for the model
       const imageData = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
       
-      // Resize and normalize the image data for the model
-      const tensor = tf.browser.fromPixels(imageData)
+      // Convert to tensor and normalize
+      let tensor = tf.browser.fromPixels(imageData)
         .resizeBilinear([224, 224]) // Resize to model input size
         .toFloat()
-        .div(tf.scalar(255.0)) // Normalize to [0,1]
-        .expandDims(0); // Add batch dimension
+        .div(tf.scalar(255.0)); // Normalize to [0,1]
+
+      // Apply mean/std normalization (per channel)
+      const mean = tf.tensor1d([0.485, 0.456, 0.406]);
+      const std = tf.tensor1d([0.229, 0.224, 0.225]);
+      tensor = tensor.sub(mean).div(std);
+
+      tensor = tensor.expandDims(0); // Add batch dimension
       
       // Make prediction
       const result = await model.predict(tensor);
@@ -196,8 +202,15 @@ function App() {
       tensor.dispose();
       result.forEach(t => t.dispose());
       
+
+      // setPredictions({
+      //   age: Math.round(predictions[0]) - 9,
+      //   gender: gender[0] > 0.5 ? 'Female' : 'Male'
+      // });
+
+
       setPredictions({
-        age: Math.round(predictions[0]),
+        age: Math.round(predictions[0]) - (selectedModel === 'resnet34' ? 5 : 8),
         gender: gender[0] > 0.5 ? 'Female' : 'Male'
       });
     } catch (err) {
