@@ -210,7 +210,7 @@ function App() {
 
 
       setPredictions({
-        age: Math.round(predictions[0]) - (selectedModel === 'resnet34' ? 5 : 8),
+        age: Math.round(predictions[0]) - (selectedModel === 'resnet34' ? 5 : 9),
         gender: gender[0] > 0.5 ? 'Female' : 'Male'
       });
     } catch (err) {
@@ -250,7 +250,7 @@ function App() {
           </div>
         </div>
         <div className="header">
-          <h1>Age & Gender Predictor</h1>
+          <h1>Predicting Age & Gender</h1>
         </div>
         
         <div className="model-selection">
@@ -266,7 +266,7 @@ function App() {
                 disabled={isLoading || modelLoading}
               />
               <div className="model-details">
-                <h4>ResNet-34</h4>
+                <h4>ResNet-34 (84MB)</h4>
                 <p className="model-description">Lightweight model with good latency and accuracy tradeoff</p>
                 <div className="model-specs">
                   <span className="spec-item">
@@ -292,7 +292,7 @@ function App() {
                 disabled={isLoading || modelLoading}
               />
               <div className="model-details">
-                <h4>ResNet-152</h4>
+                <h4>ResNet-152 (228MB)</h4>
                 <p className="model-description">State-of-the-art model with high accuracy</p>
                 <div className="model-specs">
                   <span className="spec-item">
